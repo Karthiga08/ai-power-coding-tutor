@@ -1,30 +1,33 @@
+# Render Blueprint for the free-hosting setup (see FREE_HOSTING.md):
+# backend here, frontend on Vercel, Postgres on Neon, code execution on Judge0.
+# Render's free tier has no Docker daemon, so CODE_RUNNER_BACKEND=judge0.
 services:
   - type: web
     name: ai-tutor-backend
-    env: python
+    runtime: python
     plan: free
-    buildCommand: pip install -r backend/requirements.txt && alembic upgrade head
-    startCommand: cd backend && uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    # Tables are created on startup (Base.metadata.create_all in main.py).
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT --proxy-headers --forwarded-allow-ips=*
     healthCheckPath: /api/health
-
     envVars:
+      - key: PYTHON_VERSION
+        value: "3.11.9"
+      # Neon connection string, pasted as-is (postgresql://...?sslmode=require);
+      # config.py converts it for asyncpg.
       - key: DATABASE_URL
-        fromDatabase:
-          name: ai-tutor-db
-          property: connectionString
-      - key: JWT_SECRET
         sync: false
+      - key: JWT_SECRET
+        generateValue: true
       - key: AI_PROVIDER
         value: gemini
-      - key: OPENAI_API_KEY
-        sync: false
       - key: GEMINI_API_KEY
         sync: false
+      - key: CODE_RUNNER_BACKEND
+        value: judge0
+      - key: JUDGE0_API_KEY
+        sync: false
+      # Your Vercel URL(s), comma-separated.
       - key: CORS_ORIGINS
-        value: "https://your-frontend-url.vercel.app"
-
-  - type: pserv
-    name: ai-tutor-db
-    plan: free
-    ipAllowList: []
-    postgresMajorVersion: 15
+        sync: false

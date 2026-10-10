@@ -1,0 +1,78 @@
+# Production stack for a single Docker host (e.g. a Hetzner Cloud VM).
+#
+#   docker compose -f docker-compose.prod.yml --env-file .env up -d --build
+#
+# Only Caddy publishes ports (80/443). Postgres and the backend stay on the
+# internal network — Docker's published ports bypass ufw, so nothing else
+# should have a `ports:` entry here.
+#
+# The sandbox runner images (ai-tutor-runner-*) must already exist on the
+# host; deploy/deploy.sh builds them before bringing this stack up.
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build: ./backend
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+      # Frontend and API share one origin behind Caddy, so this only matters
+      # if you later serve the frontend from somewhere else.
+      CORS_ORIGINS: '["https://${DOMAIN}"]'
+    command:
+      - uvicorn
+      - app.main:app
+      - --host=0.0.0.0
+      - --port=8000
+      - --workers=2
+      - --proxy-headers
+      - --forwarded-allow-ips=*
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      # code_runner.py launches a throwaway sandbox container per submission
+      # through the host Docker daemon. This gives the backend root-equivalent
+      # access to the host — see DEPLOY_HETZNER.md "Security notes".
+      - /var/run/docker.sock:/var/run/docker.sock
+
+  web:
+    # Caddy: serves the built React app and reverse-proxies /api/* to the
+    # backend, with automatic Let's Encrypt HTTPS for $DOMAIN.
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.prod
+    restart: unless-stopped
+    environment:
+      DOMAIN: ${DOMAIN}
+      ACME_EMAIL: ${ACME_EMAIL}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - backend
+
+volumes:
+  db_data:
+  caddy_data:
+  caddy_config:

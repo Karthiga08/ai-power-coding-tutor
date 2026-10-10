@@ -73,10 +73,12 @@ def _run_sync(code: str, language: str) -> ExecutionResult:
     if lang is None:
         return ExecutionResult(stdout="", stderr=f"Unsupported language: {language}", exit_code=1)
 
-    client = docker.from_env()
     container_name = f"tutor-run-{uuid.uuid4().hex[:12]}"
     container = None
     try:
+        # Inside the try so an unreachable Docker daemon becomes a
+        # "Sandbox error" result instead of an unhandled 500.
+        client = docker.from_env()
         # Not read_only: the /sandbox overlay needs to be writable at
         # `create` time so put_archive() can inject the file below before
         # the container is started. A tmpfs mount here would only be

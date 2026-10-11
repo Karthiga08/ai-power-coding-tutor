@@ -91,6 +91,11 @@ npm install
 npm run dev
 ```
 
+## Hosting
+
+- **Free, no credit card** (Vercel + Render + Neon + Judge0): see [FREE_HOSTING.md](FREE_HOSTING.md)
+- **Single VM with Docker** (Hetzner, Oracle Free, any Ubuntu server): see [DEPLOY_HETZNER.md](DEPLOY_HETZNER.md)
+
 ## Architecture
 
 ```

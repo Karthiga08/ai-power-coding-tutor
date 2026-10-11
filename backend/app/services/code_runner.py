@@ -4,6 +4,9 @@ container: no network, capped CPU/memory, hard timeout, killed and removed
 afterwards. This is the sandbox described in report section 6.5, generalized
 across languages (Python, Java, Ruby) via LANGUAGES below.
 
+With CODE_RUNNER_BACKEND=judge0, run_submission delegates to
+judge0_runner.py instead, for hosts without a Docker daemon.
+
 The Docker SDK is synchronous, so calls are pushed to a thread via
 asyncio.to_thread so they don't block the FastAPI event loop.
 """
@@ -130,4 +133,9 @@ def _run_sync(code: str, language: str) -> ExecutionResult:
 
 
 async def run_submission(code: str, language: str = "python") -> ExecutionResult:
+    if settings.code_runner_backend == "judge0":
+        # Imported here: judge0_runner imports ExecutionResult from this module.
+        from app.services.judge0_runner import run_judge0
+
+        return await run_judge0(code, language)
     return await asyncio.to_thread(_run_sync, code, language)
